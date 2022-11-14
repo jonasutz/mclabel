@@ -9,7 +9,7 @@ import skimage
 from skimage.segmentation import clear_border
 from skimage.measure import label, regionprops, regionprops_table
 from skimage.morphology import closing, square
-from utils import fill_label_holes
+from utils import fill_label_holes, fill_label_holes_cv2
 from skimage.util import map_array
 
 
@@ -97,12 +97,14 @@ class McLabel(QMainWindow):
     @staticmethod
     def connected_component(binary_image):
         label_image = label(binary_image)
-        label_image = fill_label_holes(label_image)
+        label_image = fill_label_holes_cv2(label_image)
         return label_image
 
     def apply_filter(self, lbl_img, condition='area', min_value=100):
         table = regionprops_table(lbl_img, properties=('label', 'area'))
-        filt = table[condition] > min_value
+        print(f"DEBUG: {table['area'].max()=}")
+        #filt = table[condition] > min_value
+        filt = table[condition] == table['area'].max()
         input_label = table['label']
         output_label = input_label * filt
         filtered_label = map_array(lbl_img, input_label, output_label)
