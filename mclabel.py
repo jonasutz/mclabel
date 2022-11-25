@@ -1,16 +1,11 @@
 import numpy as np
 import napari
-import tifffile
 from scipy import ndimage
-from skimage import data
-import matplotlib.pyplot as plt
 from qtpy.QtWidgets import QPushButton, QMainWindow, QCheckBox, QSpinBox, QLabel, QSlider, QShortcut, QWidget
 from qtpy.QtCore import *
 from qtpy.QtGui import QKeySequence
 import skimage
-from skimage.segmentation import clear_border
 from skimage.measure import label, regionprops, regionprops_table
-from skimage.morphology import closing, square
 from utils import fill_label_holes, fill_label_holes_cv2
 from skimage.util import map_array
 from enum import Enum

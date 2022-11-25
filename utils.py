@@ -1,7 +1,6 @@
 import numpy as np
 from scipy.ndimage.morphology import binary_fill_holes
 from scipy.ndimage.measurements import find_objects
-import cv2
 
 
 
@@ -33,6 +32,7 @@ def fill_label_holes(lbl_img, **kwargs):
     return lbl_img_filled
 
 def fill_label_holes_cv2(lbl_img):
+    import cv2
     h, w = lbl_img.shape[:2]
     mask = np.zeros((h + 2, w + 2), np.uint8)
 
