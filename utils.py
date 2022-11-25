@@ -4,7 +4,6 @@ from scipy.ndimage.measurements import find_objects
 
 
 
-
 def _fill_label_holes(lbl_img, **kwargs):
     lbl_img_filled = np.zeros_like(lbl_img)
     for l in (set(np.unique(lbl_img)) - set([0])):
@@ -31,3 +30,22 @@ def fill_label_holes(lbl_img, **kwargs):
         mask_filled = binary_fill_holes(grown_mask,**kwargs)[shrink_slice]
         lbl_img_filled[sl][mask_filled] = i
     return lbl_img_filled
+
+def fill_label_holes_cv2(lbl_img):
+    import cv2
+    h, w = lbl_img.shape[:2]
+    mask = np.zeros((h + 2, w + 2), np.uint8)
+
+    # Floodfill from point (0, 0)
+    filled = cv2.floodFill(lbl_img, None, (0, 0), int(lbl_img.max()));
+
+    # Invert floodfilled image
+    im_floodfill_inv = cv2.bitwise_not(filled[2])
+
+    # Combine the two images to get the foreground.
+    #im_out = lbl_img | im_floodfill_inv
+    #print(f'{lbl_img.shape=},\n,{lbl_img.max()=}, \n,{lbl_img.min()=}')
+    #print(f'{im_out.shape=},\n,{im_out.max()=}, \n,{im_out.min()=}')
+    height, width = im_floodfill_inv.shape
+    im_floodfill_inv = np.where(im_floodfill_inv==254, 0, lbl_img.max())
+    return im_floodfill_inv[1:height-1, 1:width-1]
