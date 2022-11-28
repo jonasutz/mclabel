@@ -1,12 +1,11 @@
 import numpy as np
 import napari
 from scipy import ndimage
-from qtpy.QtWidgets import QPushButton, QMainWindow, QCheckBox, QSpinBox, QLabel, QSlider, QShortcut, QWidget
+from qtpy.QtWidgets import QPushButton, QLabel, QSlider, QWidget
 from qtpy.QtCore import *
-from qtpy.QtGui import QKeySequence
 import skimage
 from skimage.measure import label, regionprops, regionprops_table
-from utils import fill_label_holes, fill_label_holes_cv2
+from napari_mclabel.utils import fill_label_holes
 from skimage.util import map_array
 from enum import Enum
 from napari_plugin_engine import napari_hook_implementation
