@@ -2,7 +2,7 @@
 
 ## Welche Makrophagen werden gelabelt?
 
-<img src="/Users/jonas/Library/Mobile Documents/com~apple~CloudDocs/FAU/AIMI/PhD/04_Projects/02_MACRO/BVM/reference.png" alt="reference" style="zoom:50%;" />
+<img src="./img/reference.png" alt="reference" style="zoom:50%;" />
 
 Idealerweise in der gezeigten Reihenfolge, ist aber kein muss. 
 
@@ -25,16 +25,16 @@ Benötigt werden zwei Durchläufe - zunächst ohne McLabel, dann mit McLabel. Di
 6. Zur ersten Makrophage die gelabelt werden soll hinzoomen
 
 7. In den `Paint`-Mode gehen durch anwählen des Buttons (siehe Bild) oder mit Key-Bind  `2` auf der Tastatur. Die brush-size kann beliebig gewählt werden.
-   ![image-20221215145613842](/Users/jonas/Library/Application Support/typora-user-images/image-20221215145613842.png)
+   ![image-20221215145613842](./img/image-20221215145613842.png)
 
 8.  Wenn bereit zum labeln, Button `Start Timer` drücken!
 
 9. Nun kann die Makrophage gelabelt werden. Am schnellsten geht es meistens wenn man grob die Umrisse im inneren der Makrophage aufzeichnet (siehe Bild):
-   <img src="/Users/jonas/Library/Application Support/typora-user-images/image-20221215150658283.png" alt="image-20221215150658283" style="zoom:50%;" />
+   <img src="./img/image-20221215150658283.png" alt="image-20221215150658283" style="zoom:50%;" />
 
 10. Der Umriss kann mit dem Fill-Bucket (Key-Binding: `3`) direkt ausgefüllt werden: Das geht schneller als alles von Hand auszumalen. 
 
-    <img src="/Users/jonas/Library/Application Support/typora-user-images/image-20221215150733162.png" alt="image-20221215150733162" style="zoom:50%;" />
+    <img src="./img/image-20221215150733162.png" alt="image-20221215150733162" style="zoom:50%;" />
 
 11. Die feinen Strukturen sowie der Rand müssen dann leider trotzdem noch von Hand ausgemalt werden.  Die abgebildete Makrophage ist nicht vollständig gelabelt! 
 
@@ -46,7 +46,7 @@ Benötigt werden zwei Durchläufe - zunächst ohne McLabel, dann mit McLabel. Di
 
 Wenn fertig:
 Layer `OutputLabel` als tiff speichern:
-![image-20221215153054610](/Users/jonas/Library/Application Support/typora-user-images/image-20221215153054610.png)
+![image-20221215153054610](./img/image-20221215153054610.png)
 
 ## Annotation mit McLabel
 
@@ -59,11 +59,11 @@ Layer `OutputLabel` als tiff speichern:
 4. Den Button `Start Timer` drücken sobald man sich bereit fühlt. 
 
 5. Nun direkt den groben Umriss der Makrophage aufzeichnen:
-   ![image-20221215153354818](/Users/jonas/Library/Application Support/typora-user-images/image-20221215153354818.png) 
+   ![image-20221215153354818](./img/image-20221215153354818.png) 
 
 6. Dann den Button `Compute Label` drücken. Wenn das Ergebnis passt kann der Timer direkt gestoppt werden und mit der nächsten Makrophage weiter gemacht werden.
    Falls das Ergebnis nicht gefällt, kann mit dem Threshold slider:
-   ![image-20221215153521864](/Users/jonas/Library/Application Support/typora-user-images/image-20221215153521864.png)
+   ![image-20221215153521864](./img/image-20221215153521864.png)
    das Ergebnis weiter verfeinert werden. Manchmal muss noch mit der Brush, analog zum manuellen Modus, nachgearbeitet werden. Wenn das Ergebnis gefällt, Timer stoppen. 
 
 7. Nächste Makrophage raussuchen, Timer starten, `Draw Label` drücken und dann wieder den Umriss zeichnen. 
