@@ -53,8 +53,8 @@ class McLabel(QWidget):
         self.layer_types = {"image": napari.layers.image.image.Image, "labels": napari.layers.labels.labels.Labels}
 
         # draw_button
-        self.start_button = QPushButton('Draw Label')
-        self.start_button.clicked.connect(self.btn_click)
+        self.draw_compute_btn = QPushButton('Draw Label')
+        self.draw_compute_btn.clicked.connect(self.btn_click)
 
         # List of layers to (select layer to segment)
         self.layer_selection_lbl = QLabel("Select layer to segment:")
@@ -75,10 +75,6 @@ class McLabel(QWidget):
         # {"combobox": self.cb_label_layers, "layer_type": "labels"}]
         self.init_comboboxes()
 
-        # preprocess button
-        self.preproc_button = QPushButton('Convert Images')
-        self.preproc_button.clicked.connect(self.preproc_fn)
-
         # Slider for manual adjustment of threshold
         self.threshold_slider_lbl = QLabel("Threshold: ")
         self.threshold_slider = QSlider(Qt.Orientation.Horizontal)
@@ -90,14 +86,14 @@ class McLabel(QWidget):
         self.threshold_slider.valueChanged.connect(self.manual_threshold_adjustment)
 
         self.viewer.window.add_dock_widget(
-            [self.start_button, self.preproc_button,
-             self.layer_selection_lbl, self.layer_selection_cb, self.algo_selection_lbl, self.algo_selection_cb,
+            [self.draw_compute_btn, self.layer_selection_lbl, self.layer_selection_cb, self.algo_selection_lbl,
+             self.algo_selection_cb,
              self.threshold_slider_lbl, self.threshold_slider],
             area='right',
             name='McLabel')
 
         self.current_max_lbl = 0
-        self.start_button.setEnabled(False)
+        self.draw_compute_btn.setEnabled(True)
 
         self.state = State.NO_INIT
 
@@ -119,77 +115,85 @@ class McLabel(QWidget):
 
         self._load_model()  # TODO: Load sam only when required
 
-
     def init_layers(self, event):
         if len(self.viewer.layers) == 1:
             # If an image was added we can now allow labelling (i.e. enable the button)
-            self.start_button.setEnabled(True)
+            self.draw_compute_btn.setEnabled(True)
 
-
-    def preproc_fn(self):
-        if isinstance(self.viewer.layers[0].data, napari.layers._multiscale_data.MultiScaleData):
-            # user manually selects all layers which shall be considered for MIP
-            num_layers_selected = len(self.viewer.layers.selection)
-            assert num_layers_selected > 0, "At least one layer must be selected"
-
-            singleton = self.viewer.layers[0].data.shape[
-                            0] == 1  # sometimes the ims loader returns the array with singleton
-
-            if singleton:  # maybe we do not need this
-                _, z, y, x = self.viewer.layers[0].data[0].shape
-            else:
-                z, y, x = self.viewer.layers[0].data[0].shape
-
-            max_intensity_img = np.zeros((2, y, x))
-            # TODO:
-            # merge max value from all selected layers into one channel
-            # channels that are not selected will remain as distinct channels
-            for selected in self.viewer.layers.selection:
-                sel = np.asarray(selected.data[0])[0:self.viewer.layers[0].data[0].shape[0]]
-                current_mip = np.amax(sel, axis=0)
-                np.copyto(max_intensity_img[0], current_mip, where=current_mip > max_intensity_img[0])
-
-            probably_nuc_channel = np.asarray(
-                [l for l in self.viewer.layers if l not in self.viewer.layers.selection][0].data[0].copy())[
-                                   0:self.viewer.layers[0].data[0].shape[0]]
-            max_intensity_img[1] = np.amax(probably_nuc_channel, axis=0)
-
-        else:  # no ims file, image presumed to be already processed
-            max_intensity_img = self.viewer.layers[0].data.copy()
-
-        # self.viewer.layers.clear()
-        # self.viewer.add_image(max_intensity_img,
-        #                       channel_axis=0,
-        #                       name=["macrophages", "nuclei"],
-        #                       colormap=["gray", "magenta"],
-        #                       contrast_limits=[[0, 75], [0, 75]],
-        #                       )
-
-        self.image_layer = self.viewer.layers[self.layer_selection_cb.currentText()]
-
-        # if self.image_layer.ndim == 3 and not self.image_layer.rgb: # if 3d image:
-        # 3d image 2d layer: np.zeros(self.image_layer.data.shape[self.viewer.dims.ndim - self.viewer.dims.ndisplay:], dtype='int32')
-        self.label_layer = self.viewer.add_labels(
-            np.zeros(self.image_layer.data.shape, dtype='int32'),
-            name='OutputLabel')
-
-        self.label_layer.events.selected_label.connect(on_label_change)
-        # self.label_layer.selected_label = 0
-        self.viewer.reset_view()
-        self.threshold_slider.setRange(0, int(self.image_layer.data.max() // 2))
-        self.preproc_button.setVisible(False)
-        self.start_button.setText("Compute Label")
-        self.draw_fn()
+    # def preproc_fn(self):
+    #     if isinstance(self.viewer.layers[0].data, napari.layers._multiscale_data.MultiScaleData):
+    #         # user manually selects all layers which shall be considered for MIP
+    #         num_layers_selected = len(self.viewer.layers.selection)
+    #         assert num_layers_selected > 0, "At least one layer must be selected"
+    #
+    #         singleton = self.viewer.layers[0].data.shape[
+    #                         0] == 1  # sometimes the ims loader returns the array with singleton
+    #
+    #         if singleton:  # maybe we do not need this
+    #             _, z, y, x = self.viewer.layers[0].data[0].shape
+    #         else:
+    #             z, y, x = self.viewer.layers[0].data[0].shape
+    #
+    #         max_intensity_img = np.zeros((2, y, x))
+    #         # TODO:
+    #         # merge max value from all selected layers into one channel
+    #         # channels that are not selected will remain as distinct channels
+    #         for selected in self.viewer.layers.selection:
+    #             sel = np.asarray(selected.data[0])[0:self.viewer.layers[0].data[0].shape[0]]
+    #             current_mip = np.amax(sel, axis=0)
+    #             np.copyto(max_intensity_img[0], current_mip, where=current_mip > max_intensity_img[0])
+    #
+    #         probably_nuc_channel = np.asarray(
+    #             [l for l in self.viewer.layers if l not in self.viewer.layers.selection][0].data[0].copy())[
+    #                                0:self.viewer.layers[0].data[0].shape[0]]
+    #         max_intensity_img[1] = np.amax(probably_nuc_channel, axis=0)
+    #
+    #     else:  # no ims file, image presumed to be already processed
+    #         max_intensity_img = self.viewer.layers[0].data.copy()
+    #
+    #     # self.viewer.layers.clear()
+    #     # self.viewer.add_image(max_intensity_img,
+    #     #                       channel_axis=0,
+    #     #                       name=["macrophages", "nuclei"],
+    #     #                       colormap=["gray", "magenta"],
+    #     #                       contrast_limits=[[0, 75], [0, 75]],
+    #     #                       )
+    #
+    #     self.image_layer = self.viewer.layers[self.layer_selection_cb.currentText()]
+    #
+    #     # if self.image_layer.ndim == 3 and not self.image_layer.rgb: # if 3d image:
+    #     # 3d image 2d layer: np.zeros(self.image_layer.data.shape[self.viewer.dims.ndim - self.viewer.dims.ndisplay:], dtype='int32')
+    #     self.label_layer = self.viewer.add_labels(
+    #         np.zeros(self.image_layer.data.shape, dtype='int32'),
+    #         name='OutputLabel')
+    #
+    #     self.label_layer.events.selected_label.connect(on_label_change)
+    #     # self.label_layer.selected_label = 0
+    #     self.viewer.reset_view()
+    #     self.threshold_slider.setRange(0, int(self.image_layer.data.max() // 2))
+    #     self.preproc_button.setVisible(False)
+    #     self.draw_compute_btn.setText("Compute Label")
+    #     self.draw_fn()
 
     def btn_click(self):
         if self.state == State.DRAW:
-            self.start_button.setText("Draw Label")
+            self.draw_compute_btn.setText("Draw Label")
             self.compute_fn()
-        elif self.state == State.COMPUTE:
-            self.start_button.setText("Compute Label")
+        elif self.state == State.COMPUTE or self.state == State.NO_INIT:
+            self.draw_compute_btn.setText("Compute Label")
             self.draw_fn()
 
     def draw_fn(self):
+        if self.state == State.NO_INIT:
+            self.image_layer = self.viewer.layers[self.layer_selection_cb.currentText()]
+
+            self.label_layer = self.viewer.add_labels(
+                np.zeros(self.image_layer.data.shape, dtype='int32'),
+                name='Output Label')
+
+            self.label_layer.events.selected_label.connect(on_label_change)
+            self.threshold_slider.setRange(0, int(self.image_layer.data.max() // 2))
+            self.draw_compute_btn.setText("Compute Label")
         self.state = State.DRAW
         labels = np.zeros(self.image_layer.data.shape[self.viewer.dims.ndim - self.viewer.dims.ndisplay:],
                           dtype='int32')  # label helper is always 2D
