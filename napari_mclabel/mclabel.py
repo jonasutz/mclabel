@@ -176,7 +176,7 @@ class McLabel(QWidget):
         self.label_layer.events.selected_label.connect(on_label_change)
         # self.label_layer.selected_label = 0
         self.viewer.reset_view()
-        self.threshold_slider.setRange(0, self.image_layer.data.max() // 2)  # TODO: Move this to somewhere else.
+        self.threshold_slider.setRange(0, int(self.image_layer.data.max() // 2))
         self.preproc_button.setVisible(False)
         self.start_button.setText("Compute Label")
         self.draw_fn()
