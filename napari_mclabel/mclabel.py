@@ -120,17 +120,6 @@ class McLabel(QWidget):
         self._load_model()  # TODO: Load sam only when required
 
 
-    @staticmethod
-    def create_logfolder():
-        home_dir = os.path.expanduser("~")
-        folder_name = "mclabel"
-        folder_path = os.path.join(home_dir, folder_name)
-
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-            print(f"Created log folder at {folder_path}")
-        return folder_path
-
     def init_layers(self, event):
         if len(self.viewer.layers) == 1:
             # If an image was added we can now allow labelling (i.e. enable the button)
@@ -275,7 +264,7 @@ class McLabel(QWidget):
         self.points = borderpoints[np.random.choice(borderpoints.shape[0], 20, replace=False), :]
         labeled_macro = ndimage.binary_fill_holes(labeled_macro).astype('int32')
         props = regionprops(labeled_macro)
-        
+
         for prop in props:
             minr, minc, maxr, maxc = prop.bbox
         img_patch = self.image_layer.data[minr:maxr,
