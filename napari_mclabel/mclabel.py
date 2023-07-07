@@ -99,21 +99,6 @@ class McLabel(QWidget):
 
         self.normalize = False
 
-        # Stuff for sam
-        if not torch.cuda.is_available():
-            if not torch.backends.mps.is_available():
-                self.device = "cpu"
-            else:
-                self.device = "mps"
-        else:
-            self.device = "cuda"
-
-        self.sam_model = None
-        self.sam_predictor = None
-        self.sam_logits = None
-        self.sam_features = None
-
-        self._load_model()  # TODO: Load sam only when required
 
     def init_layers(self, event):
         if len(self.viewer.layers) == 1:
@@ -374,7 +359,6 @@ class McLabel(QWidget):
 
     def get_supported_algorithms(self):
         algos = [func_name.split('_')[-1] for func_name in dir(skimage.filters) if func_name.startswith('threshold_')]
-        algos.append("SAM")
         return algos
 
     def _init_comboboxes_callback(self):
@@ -383,51 +367,7 @@ class McLabel(QWidget):
     def _on_layers_changed_callback(self):
         pass
 
-    def _load_model(self):
-        self.sam_model = sam_model_registry['vit_h']("/Users/jonas/.cache/napari-segment-anything/sam_vit_h_4b8939.pth")
-        self.sam_model.to(self.device)
-        self.sam_predictor = SamPredictor(self.sam_model)
-        self.sam_anything_predictor = SamAutomaticMaskGenerator(model=self.sam_model, pred_iou_thresh=0.75,
-                                                                stability_score_thresh=0.75)
 
-    def compute_label_from_patch_sam(self, image_patch):
-        # TODO: make sure we have uint8_t
-        if image_patch.dtype != 'uint8':
-            image_patch = image_patch / image_patch.max()
-            image_patch *= 255
-            image_patch = np.round(image_patch)
-            image_patch = image_patch.astype('uint8')
-
-        image_patch = np.stack((image_patch,) * 3, axis=-1)
-        records = self.sam_anything_predictor.generate(image_patch)
-        masks = np.asarray([record["segmentation"] for record in records])
-        prediction = np.argmax(masks, axis=0)
-        return prediction
-
-    def compute_label_from_patch_sam_prompt(self, image_patch):
-        if image_patch.dtype != 'uint8':
-            image_patch = image_patch / image_patch.max()
-            image_patch *= 255
-            image_patch = np.round(image_patch)
-            image_patch = image_patch.astype('uint8')
-
-        image_patch = np.stack((image_patch,) * 3, axis=-1)
-
-        self.sam_predictor.set_image(image_patch)
-        self.sam_features = self.sam_predictor.features
-        prediction, _, self.sam_logits = self.sam_predictor.predict(
-            point_coords=np.flip(self.points, axis=-1),
-            point_labels=np.asarray(np.zeros(self.points.shape[0])),
-            mask_input=self.sam_logits,
-            multimask_output=False,
-            return_logits=False,
-        )
-        prediction = prediction[0]
-        # prediction = np.abs(prediction)
-        # prediction = np.round(prediction).astype('int32')
-        # prediction[prediction > 0] = 1
-        # wenn dat so funktioniert wärs ja megaaa
-        return prediction
 
 
 @napari_hook_implementation
