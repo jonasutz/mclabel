@@ -1,8 +1,5 @@
-import time
-
 import numpy as np
 import napari
-from PyQt5.QtWidgets import QComboBox
 from scipy import ndimage
 from qtpy.QtWidgets import QPushButton, QLabel, QSlider, QWidget, QCheckBox, QComboBox
 from qtpy.QtCore import *
@@ -13,18 +10,21 @@ from napari_mclabel.utils import fill_label_holes
 from skimage.util import map_array
 from enum import Enum
 from napari_plugin_engine import napari_hook_implementation
-import imageio
-import csv
-import os
-from segment_anything import SamPredictor, sam_model_registry  # Schau ma mal, was' wird
-from segment_anything.automatic_mask_generator import SamAutomaticMaskGenerator
-import torch
 
 
 class State(Enum):
     DRAW = 1
     COMPUTE = 2
     NO_INIT = 3
+
+
+class ImageType(Enum):
+    SC_2D = 1  # Single Channel 2D (Y,X)
+    MCF_2D = 2  # Multi Channel First 2D (C,Y,X)
+    MCL_2D = 3  # Multi Channel Last 2D (Y,X,C) (RGB,RGBA)
+    SC_3D = 4  # Single Channel 3D (Z,Y,X)
+    MC_3D = 5  # Multi Channel 3D (C,Z,Y,X)
+    UNKNOWN = -1
 
 
 def on_label_change(event):
@@ -96,9 +96,9 @@ class McLabel(QWidget):
         self.draw_compute_btn.setEnabled(True)
 
         self.state = State.NO_INIT
+        self.img_type = ImageType.UNKNOWN
 
         self.normalize = False
-
 
     def init_layers(self, event):
         if len(self.viewer.layers) == 1:
@@ -171,21 +171,53 @@ class McLabel(QWidget):
     def draw_fn(self):
         if self.state == State.NO_INIT:
             self.image_layer = self.viewer.layers[self.layer_selection_cb.currentText()]
-
-            self.label_layer = self.viewer.add_labels(
-                np.zeros(self.image_layer.data.shape, dtype='int32'),
-                name='Output Label')
+            if self.image_layer.data.shape[-1] in (3, 4):  # cheap heuristic for RGB(A)
+                self.label_layer = self.viewer.add_labels(np.zeros(self.image_layer.data.shape[0:2], dtype='int32'),
+                                                          name="Output Label")
+            else:
+                self.label_layer = self.viewer.add_labels(
+                    np.zeros(self.image_layer.data.shape, dtype='int32'),
+                    name='Output Label')
 
             self.label_layer.events.selected_label.connect(on_label_change)
             self.threshold_slider.setRange(0, int(self.image_layer.data.max() // 2))
             self.draw_compute_btn.setText("Compute Label")
         self.state = State.DRAW
-        labels = np.zeros(self.image_layer.data.shape[self.viewer.dims.ndim - self.viewer.dims.ndisplay:],
-                          dtype='int32')  # label helper is always 2D
-        self.label_helper = self.viewer.add_labels(labels, name='label_helper')
+
+        image_shape = self.image_layer.data.shape
+        if len(image_shape) >= 4:
+            # 3D with channels: (C,Z,Y,X)
+            labels = np.zeros(self.image_layer.data.shape[self.viewer.dims.ndim - self.viewer.dims.ndisplay:],
+                              dtype='int32')  # label helper is always 2D
+            self.img_type = ImageType.MC_3D
+        elif len(image_shape) == 3:
+            if image_shape[-1] in (3, 4):
+                # 2D RGB(A): (Y,X,3) or (Y,X,4)
+                labels = np.zeros((image_shape[0], image_shape[1]), dtype='int32')
+                # self.image_layer.data = self.image_layer.data[:, :, 0].copy()
+                # self.image_layer.refresh()
+                self.img_type = ImageType.MCL_2D
+            elif image_shape[-1] == 1:
+                # 2D single channel with singleton (Y,X,1)
+                labels = np.zeros((image_shape[0], image_shape[1]), dtype='int32')
+                self.img_type = ImageType.SC_2D
+            else:
+                # TODO: this could be also ImageType.MCF_2D
+                # 3D single channel: (Z,Y,X)
+                labels = np.zeros((image_shape[1], image_shape[2]), dtype='int32')
+                self.img_type = ImageType.SC_3D
+        elif len(image_shape) == 2:
+            # 2D single channel: (Y,X)
+            labels = np.zeros((image_shape[0], image_shape[1]))
+            self.img_type = ImageType.SC_2D
+        else:
+            # No support for other shapes at the moment
+            self.img_type = ImageType.UNKNOWN
+            raise NotImplementedError
+        self.label_helper = self.viewer.add_labels(labels, name='_label_helper')
         self.label_helper.brush_size = 17
         self.viewer.layers[0].selected = False
-        self.viewer.layers['label_helper'].selected = True
+        self.viewer.layers['_label_helper'].selected = True
 
         self.label_helper.mode = "PAINT"
 
@@ -195,20 +227,33 @@ class McLabel(QWidget):
         img_patch, (minr, minc, maxr, maxc) = self.get_patch_from_layer()
 
         # Apply image processing
-        # filtered_label = self.compute_label_from_patch(img_patch).astype('int32')
-        if self.algo == "SAM":
-            filtered_label = self.compute_label_from_patch_sam_prompt(img_patch).astype('int32')
-        else:
-            filtered_label = self.compute_label_from_patch(img_patch).astype('int32')
+        filtered_label = self.compute_label_from_patch(img_patch).astype('int32')
 
         # Adapt counting of filtered label to current_max_lbl + 1
         self.current_max_lbl += 1
         filtered_label[filtered_label != 0] = self.current_max_lbl
 
         # Refresh layers
-        label_patch = self.label_layer.data[self.viewer.dims.current_step[0], minr:maxr, minc:maxc].copy()
+        if self.img_type in (ImageType.SC_3D, ImageType.SC_3D):
+            label_patch = self.label_layer.data[self.viewer.dims.current_step[0], minr:maxr, minc:maxc].copy()
+        elif self.img_type == ImageType.MC_3D:
+            label_patch = self.label_layer.data[self.viewer.dims.current_step[0], self.viewer.dims.current_step[1],
+                          minr:maxr, minc:maxc].copy()
+        # elif self.img_type == ImageType.MCL_2D:
+        #     label_patch = self.label_layer.data[minr:maxr, minc:maxc, 0].copy()
+        else:
+            label_patch = self.label_layer.data[minr:maxr, minc:maxc].copy()
         out_patch_1 = np.where(label_patch == 0, filtered_label, label_patch)
-        self.label_layer.data[self.viewer.dims.current_step[0], minr:maxr, minc:maxc] = out_patch_1
+
+        if self.img_type in (ImageType.SC_3D, ImageType.SC_3D):
+            self.label_layer.data[self.viewer.dims.current_step[0], minr:maxr, minc:maxc] = out_patch_1
+        elif self.img_type == ImageType.MC_3D:
+            self.label_layer.data[self.viewer.dims.current_step[0], self.viewer.dims.current_step[1], minr:maxr,
+            minc:maxc] = out_patch_1
+        # elif self.img_type == ImageType.MCL_2D:
+        #     self.label_layer.data[minr:maxr, minc:maxc, 0] = out_patch_1
+        else:
+            self.label_layer.data[minr:maxr, minc:maxc] = out_patch_1
 
         self.label_layer.refresh()
 
@@ -238,9 +283,8 @@ class McLabel(QWidget):
         """Change state of McLabel"""
         pass
 
-    def apply_filter(self, lbl_img, condition='area', min_value=100):
+    def apply_filter(self, lbl_img, condition='area'):
         table = regionprops_table(lbl_img, properties=('label', 'area'))
-        # filt = table[condition] > min_value
         filt = table[condition] == table['area'].max()
         input_label = table['label']
         output_label = input_label * filt
@@ -249,20 +293,41 @@ class McLabel(QWidget):
 
     def get_patch_from_layer(self):
         labeled_macro = self.label_helper.data.copy()
-        borderpoints = np.argwhere(labeled_macro != 0)
-        self.points = borderpoints[np.random.choice(borderpoints.shape[0], 20, replace=False), :]
         labeled_macro = ndimage.binary_fill_holes(labeled_macro).astype('int32')
         props = regionprops(labeled_macro)
 
         for prop in props:
             minr, minc, maxr, maxc = prop.bbox
-        img_patch = self.image_layer.data[minr:maxr,
-                    minc:maxc].copy() if self.viewer.dims.ndim == 2 else self.image_layer.data[
-                                                                         self.viewer.dims.current_step[0],  # z
-                                                                         minr:maxr,  # y
-                                                                         minc:maxc].copy()  # x
-        img_patch[
-            labeled_macro[minr:maxr, minc:maxc] == 0] = 0  # removes parts outside hand-drawn region. TODO: 3D handling
+        # img_patch = self.image_layer.data[minr:maxr,
+        #             minc:maxc].copy() if self.viewer.dims.ndim == 2 else self.image_layer.data[
+        #                                                                  self.viewer.dims.current_step[0],  # z
+        #                                                                  minr:maxr,  # y
+        #                                                                  minc:maxc].copy()  # x
+        # img_patch[
+        #     labeled_macro[minr:maxr, minc:maxc] == 0] = 0  # removes parts outside hand-drawn region. TODO: 3D handling
+
+        if self.img_type == ImageType.SC_2D:
+            img_patch = self.image_layer.data[minr:maxr, minc:maxc].copy()
+            img_patch[
+                labeled_macro[minr:maxr, minc:maxc] == 0] = 0  # removes parts outside hand-drawn region
+        if self.img_type == ImageType.SC_3D:
+            img_patch = self.image_layer.data[
+                        self.viewer.dims.current_step[0],  # z
+                        minr:maxr,  # y
+                        minc:maxc].copy()  # x
+            img_patch[labeled_macro[minr:maxr, minc:maxc] == 0] = 0
+        if self.img_type == ImageType.MC_3D:
+            img_patch = self.image_layer.data[
+                        self.viewer.dims.current_step[0],  # C
+                        self.viewer.dims.current_step[1],  # Z
+                        minr:maxr,
+                        minc:maxc
+                        ].copy()
+            img_patch[labeled_macro[minr:maxr, minc:maxc] == 0] = 0
+        if self.img_type == ImageType.MCL_2D:
+            img_patch = self.image_layer.data[minr:maxr, minc:maxc, 0].copy()
+            img_patch[
+                labeled_macro[minr:maxr, minc:maxc] == 0] = 0
 
         return img_patch, (minr, minc, maxr, maxc)
 
@@ -281,7 +346,16 @@ class McLabel(QWidget):
     def manual_threshold_adjustment(self, thresh):
         img_patch, (minr, minc, maxr, maxc) = self.get_patch_from_layer()
         filtered_label = self.compute_label_from_patch(img_patch, thresh=thresh)
-        label_patch = self.label_layer.data[self.viewer.dims.current_step[0], minr:maxr, minc:maxc].copy()
+        #label_patch = self.label_layer.data[self.viewer.dims.current_step[0], minr:maxr, minc:maxc].copy()
+        if self.img_type in (ImageType.SC_3D, ImageType.SC_3D):
+            label_patch = self.label_layer.data[self.viewer.dims.current_step[0], minr:maxr, minc:maxc].copy()
+        elif self.img_type == ImageType.MC_3D:
+            label_patch = self.label_layer.data[self.viewer.dims.current_step[0], self.viewer.dims.current_step[1],
+                          minr:maxr, minc:maxc].copy()
+        # elif self.img_type == ImageType.MCL_2D:
+        #     label_patch = self.label_layer.data[minr:maxr, minc:maxc, 0].copy()
+        else:
+            label_patch = self.label_layer.data[minr:maxr, minc:maxc].copy()
         # make sure that we keep original label id when changing threshold
         if label_patch.max():
             # filtered_label[filtered_label != 0] = label_patch.max()
@@ -290,7 +364,16 @@ class McLabel(QWidget):
         out_patch = label_patch.copy()
         np.copyto(out_patch, filtered_label, where=label_patch == 0)
         np.copyto(out_patch, filtered_label, where=label_patch == self.current_max_lbl)
-        self.label_layer.data[self.viewer.dims.current_step[0], minr:maxr, minc:maxc] = out_patch
+        #self.label_layer.data[self.viewer.dims.current_step[0], minr:maxr, minc:maxc] = out_patch  # TODO!
+        if self.img_type in (ImageType.SC_3D, ImageType.SC_3D):
+            self.label_layer.data[self.viewer.dims.current_step[0], minr:maxr, minc:maxc] = out_patch
+        elif self.img_type == ImageType.MC_3D:
+            self.label_layer.data[self.viewer.dims.current_step[0], self.viewer.dims.current_step[1], minr:maxr,
+            minc:maxc] = out_patch
+        # elif self.img_type == ImageType.MCL_2D:
+        #     self.label_layer.data[minr:maxr, minc:maxc, 0] = out_patch_1
+        else:
+            self.label_layer.data[minr:maxr, minc:maxc] = out_patch
         self.label_layer.refresh()
 
     def on_image_change(self):
@@ -315,8 +398,6 @@ class McLabel(QWidget):
 
         # Inform all comboboxes on layer changes with the viewer.layer_change event
         self.viewer.events.layers_change.connect(self._on_layers_changed)
-
-        # viewer.layer_change event does not inform about layer name changes, so we have to register a separate event to each layer and each layer that will be created
 
         # Register an event to all existing layers
         for layer_name in self.get_layer_names():
@@ -366,8 +447,6 @@ class McLabel(QWidget):
 
     def _on_layers_changed_callback(self):
         pass
-
-
 
 
 @napari_hook_implementation
