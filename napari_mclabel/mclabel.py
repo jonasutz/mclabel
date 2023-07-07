@@ -259,7 +259,6 @@ class McLabel(QWidget):
         self.viewer.layers['label_helper'].selected = True
 
         self.label_helper.mode = "PAINT"
-        # print("Hello Not-Foo!")
 
     def compute_fn(self):
         self.state = State.COMPUTE
@@ -290,7 +289,6 @@ class McLabel(QWidget):
 
         self.threshold_slider_lbl.setVisible(True)
         self.threshold_slider.setVisible(True)
-        print("Done")
 
     @staticmethod
     def apply_threshold(patch, threshold):
@@ -311,12 +309,10 @@ class McLabel(QWidget):
 
     def change_state(self, state):
         """Change state of McLabel"""
-        # TODO: write TODO for this function
         pass
 
     def apply_filter(self, lbl_img, condition='area', min_value=100):
         table = regionprops_table(lbl_img, properties=('label', 'area'))
-        print(f"DEBUG: {table['area'].max()=}")
         # filt = table[condition] > min_value
         filt = table[condition] == table['area'].max()
         input_label = table['label']
@@ -333,8 +329,6 @@ class McLabel(QWidget):
         print(f'{len(props)=}')
         for prop in props:
             minr, minc, maxr, maxc = prop.bbox
-            print(f'{minr=},{minc=},{maxr=},{maxc=}')
-            print(prop.area)
         img_patch = self.image_layer.data[minr:maxr,
                     minc:maxc].copy() if self.viewer.dims.ndim == 2 else self.image_layer.data[
                                                                          self.viewer.dims.current_step[0], # z
@@ -350,7 +344,6 @@ class McLabel(QWidget):
         if thresh is None:
             #thresh = skimage.filters.threshold_triangle(img_patch, nbins=32)
             thresh = self.algo(img_patch, nbins=32)
-        print(f'DEBUG: {thresh=}')
         binary = McLabel.apply_threshold(img_patch, thresh)
         label_image = McLabel.connected_component(binary)
         if min_area is not None:
@@ -373,7 +366,7 @@ class McLabel(QWidget):
         np.copyto(out_patch, filtered_label, where=label_patch == self.current_max_lbl)
         self.label_layer.data[self.viewer.dims.current_step[0],minr:maxr, minc:maxc] = out_patch
         self.label_layer.refresh()
-        print(f'DEBUG: {thresh=}')
+
 
     def on_image_change(self):
         # self.image_layer = self.viewer.layers[self.layer_selection_cb.currentText()]
