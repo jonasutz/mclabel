@@ -10,6 +10,7 @@ from napari_mclabel.utils import fill_label_holes
 from skimage.util import map_array
 from enum import Enum
 from napari_plugin_engine import napari_hook_implementation
+from dataclasses import dataclass
 
 
 class State(Enum):
@@ -25,6 +26,13 @@ class ImageType(Enum):
     SC_3D = 4  # Single Channel 3D (Z,Y,X)
     MC_3D = 5  # Multi Channel 3D (C,Z,Y,X)
     UNKNOWN = -1
+
+
+@dataclass
+class ImageShapeHelper:
+    img_type: ImageType
+    lbl_helper_shape: tuple
+    patch_slice: tuple
 
 
 def on_label_change(event):
@@ -159,6 +167,36 @@ class McLabel(QWidget):
     #     self.preproc_button.setVisible(False)
     #     self.draw_compute_btn.setText("Compute Label")
     #     self.draw_fn()
+
+    def determine_image_type(self):
+        """
+        Determine image type based on shape
+        :return:
+        """
+        image_shape = self.image_layer.data.shape
+        if len(image_shape) >= 4:
+            self.img_type = ImageType.MC_3D
+            return
+        if len(image_shape) == 3:
+            if image_shape[-1] in (3, 4):
+                # 2D RGB(A): (Y,X,3) or (Y,X,4)
+                self.img_type = ImageType.MCL_2D
+                return
+            elif image_shape[-1] == 1:
+                # 2D single channel with singleton (Y,X,1)
+                self.img_type = ImageType.SC_2D
+                return
+            else:
+                # TODO: this could be also ImageType.MCF_2D
+                # 3D single channel: (Z,Y,X)
+                self.img_type = ImageType.SC_3D
+                return
+        if len(image_shape) == 2:
+            # 2D single channel: (Y,X)
+            self.img_type = ImageType.SC_2D
+            return
+        self.img_type = ImageType.UNKNOWN
+        raise NotImplementedError  # TODO!
 
     def btn_click(self):
         if self.state == State.DRAW:
@@ -298,13 +336,6 @@ class McLabel(QWidget):
 
         for prop in props:
             minr, minc, maxr, maxc = prop.bbox
-        # img_patch = self.image_layer.data[minr:maxr,
-        #             minc:maxc].copy() if self.viewer.dims.ndim == 2 else self.image_layer.data[
-        #                                                                  self.viewer.dims.current_step[0],  # z
-        #                                                                  minr:maxr,  # y
-        #                                                                  minc:maxc].copy()  # x
-        # img_patch[
-        #     labeled_macro[minr:maxr, minc:maxc] == 0] = 0  # removes parts outside hand-drawn region. TODO: 3D handling
 
         if self.img_type == ImageType.SC_2D:
             img_patch = self.image_layer.data[minr:maxr, minc:maxc].copy()

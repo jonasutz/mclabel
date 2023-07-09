@@ -1,75 +1,67 @@
-# McLabel Instructions
+# Napari McLabel
+
+## What is the purpose of this tool?
+
+McLabel is a semi-automatic local thresholding tool that can help to label cellular objects such as macrophages in fluorescence microscopy images. In cases where a global threshold does not yield satisfactory results, a local threshold based on a ROI drawn by the user may give better results. See the video for an example:
+![Mclabel](./img/Mclabel.gif)
+
+
 
 ## Installation
 
-The plugin can be installed using the following command:
-
+The plugin can be installed using pip:
 ```bash
-pip install git+https://gitlab.cs.fau.de/xo04syge/mclabel.git
+pip install napari-mclabel
 ```
 
-Required packages are installed automatically. After successfull installation the plugin will appear in the plugins menu of napari 
-
-<img src="./img/image-20221125163916278.png" alt="image-20221125163916278" style="zoom:75%;" />
+After succesfull installation the plugin will appear in the plugins menu of napari.
 
 ## Usage
 
-After starting the plugin, using the Plugins menu, two new buttons appear on the side bar:
+![gui](./img/gui.png)
 
-![image-20221125164105642](./img/image-20221125164105642.png)
+The GUI of McLabel lives in the right pane of napari. If multiple layers are loaded, select the layer that you want to segment. The theshold finding algorithm is by default is triangle, however there are plenty of alternatives and depending on the data another algorithm might be better suited. 
 
-### 1. Loading an Image
+1. Press "Draw Label"
+2. Draw a rough outline around the object of interest. 
+3. Press "Compute Label"
+4. If not satisfied with result, adjust threshold using the slider
+5. Continue with next object
 
-Using drag and drop a 3D imaris file can be placed on the main window to load the image into napari. Accordingly, the individual channels of the image appear in the layer list (left panel). 
+![gui](./img/gui.gif) 
 
-**Now all layers with macrophage infomation (e.g. cytoplasm) must be selected.** Multiple layers can be selected with the `Ctrl`-key. 
+## Reference
 
-![image-20221125164554682](./img/image-20221125164554682.png)
+If you use McLabel in your work, consider citing our background paper:
+https://doi.org/10.1007/978-3-658-41657-7_20
 
-For this example image we choose only `Channel 0`, since `Channel 1` contains the nuclei (which are not required). 
 
-**To start labeling press the button `Convert Images`**. 
 
-The image is preprocessed and the output looks like this:
-
-![image-20221125164832840](./img/image-20221125164832840.png)
-
-### 2. Drawing around Macrophages
-
-Now the Plugin is in 'DRAW' mode
-
-Draw around a macrophage using the mouse:
-
-![image-20221125172049834](./img/image-20221125172049834.png)
-
-Press **`Compute Label`** to obtain a segmentation of the macrophage. 
-
-### 3. Adjusting the Output of McLabel
-
-#### 3.1 Global adjust of Threshold
-
-By moving the slider: 
-![image-20221125172231018](./img/image-20221125172231018.png)
-
-the global threshold can be adjusted if automatic computation failed. 
-
-#### 3.2 Refinement of structures with the brush
-
-In some cases we are happy with the global threshold, but small structures were not captured by the semi-automatic process (see image for reference).
-<img src="./img/image-20221128133156353.png" alt="image-20221128133156353" style="zoom:50%;" />
-
-In this case we can add more pixels:
-
-1. Select the layer `OutputLabel` from the layer list at the left pane
-2. Choose the picker from the layer controls:
-   ![image-20221128133351704](./img/image-20221128133351704.png)
-3. Click inside the label that needs adjustment
-4. Select the brush for adding or the eraser for removing pixels
-   ![image-20221128133501238](./img/image-20221128133501238.png)
-
-5. Label parts of the macrophage with the brush 
-
-### 4. Saving the labels
-
-When the OutputLabel layer is selected from the layer list, select File -> Save Selected Layer 
+```tex
+@InProceedings{10.1007/978-3-658-41657-7_20,
+author="Utz, Jonas
+and Schlereth, Maja
+and Qiu, Jingna
+and Thies, Mareike
+and Wagner, Fabian
+and Brahim, Oumaima B.
+and Gu, Mingxuan
+and Uderhardt, Stefan
+and Breininger, Katharina",
+editor="Deserno, Thomas M.
+and Handels, Heinz
+and Maier, Andreas
+and Maier-Hein, Klaus
+and Palm, Christoph
+and Tolxdorff, Thomas",
+title="McLabel",
+booktitle="Bildverarbeitung f{\"u}r die Medizin 2023",
+year="2023",
+publisher="Springer Fachmedien Wiesbaden",
+address="Wiesbaden",
+pages="82--87",
+abstract="In this work, we present a semi-automatic labelling tool for the annotation of complex cellular structures such as macrophages in fluorescence microscopy images. We present McLabel, a napari plugin that allows users to label structures of interest by simply scribbling outlines around the area of interest, using the triangle thresholding method with post-processing to identify the desired structure. Additionally, manual adaption of the threshold allows for quick and fine-grained local correction of the segmentation. The tool is evaluated in a user study with five experts, who annotated images both with and without the tool. The results show that variability in annotations between experts is reduced when the labelling tool is used and annotation time is reduced by a factor of five on average.",
+isbn="978-3-658-41657-7"
+}
+```
 
