@@ -246,7 +246,7 @@ class McLabel(QWidget):
                 self.img_type = ImageType.SC_3D
         elif len(image_shape) == 2:
             # 2D single channel: (Y,X)
-            labels = np.zeros((image_shape[0], image_shape[1]))
+            labels = np.zeros((image_shape[0], image_shape[1]), dtype='int32')
             self.img_type = ImageType.SC_2D
         else:
             # No support for other shapes at the moment
