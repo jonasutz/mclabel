@@ -13,6 +13,8 @@ from napari_plugin_engine import napari_hook_implementation
 from dataclasses import dataclass
 import inspect
 import dask.array as da
+from qtpy.QtWidgets import QWidget, QPushButton, QVBoxLayout, QDialog, QLabel, QComboBox, QHBoxLayout
+from napari.utils.theme import get_theme
 
 class State(Enum):
     DRAW = 1
@@ -67,6 +69,68 @@ def safe_call_algo(algo, *args, **kwargs):
 
     # Call the function with filtered arguments
     return algo(*filtered_args, **filtered_kwargs)
+
+
+class ThemedOptionDialog(QDialog):
+    def __init__(self, viewer, comboItems=None, parent=None):
+        super().__init__(parent)
+        
+        self.setWindowTitle("Multi-Scale Image: Select Resolution Level for McLabel")
+
+        # Apply napari's stylesheet
+        self.viewer = viewer
+        self.apply_napari_styles()
+
+        # Create the label
+        label = QLabel("A multi-scale image was detected. McLabel only supports single-scale images. Please select a resolution level:")
+
+        # Create the dropdown (combobox)
+        self.combobox = QComboBox()
+        self.combobox.addItems(comboItems)
+
+        # Create the buttons
+        ok_button = QPushButton("OK")
+        cancel_button = QPushButton("Cancel")
+
+        # Connect buttons to their actions
+        ok_button.clicked.connect(self.accept)
+        cancel_button.clicked.connect(self.reject)
+
+        # Set up the layout
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(ok_button)
+        button_layout.addWidget(cancel_button)
+
+        layout = QVBoxLayout()
+        layout.addWidget(label)
+        layout.addWidget(self.combobox)
+        layout.addLayout(button_layout)
+
+        self.setLayout(layout)
+
+    def apply_napari_styles(self):
+        # Get the current napari theme (dark or light)
+        # theme = get_theme()
+        # theme = get_theme(self.viewer.theme)
+        theme = get_theme('dark')
+        
+        # Set colors based on the theme
+        self.setStyleSheet(f"""
+        QLabel {{
+            color: {theme.text}; 
+        }}
+        QComboBox {{
+            background-color: {theme.background};
+            color: {theme.text};
+        }}
+        QPushButton {{
+            background-color: {theme.primary};
+            color: {theme.text};
+        }}
+        """)
+
+    def get_selected_option(self):
+        return self.combobox.currentText()
 
 
 class McLabel(QWidget):
@@ -235,14 +299,28 @@ class McLabel(QWidget):
             # but to avoid rendering issues we will create a new layer with the numpy array and delete the old
             if isinstance(self.image_layer.data, napari.layers._multiscale_data.MultiScaleData):
                 # Alert user that this takes some time
-                msg = QMessageBox()
-                msg.setIcon(QMessageBox.Warning)
-                msg.setText("McLabel does not support multi-scale data. Converting to largest scale available. This may take some time.")
-                msg.setWindowTitle("Converting Multi-Scale Data")
-                msg.setStandardButtons(QMessageBox.Ok)
-                msg.exec_()
+                #msg = QMessageBox()
+                #msg.setIcon(QMessageBox.Warning)
+                #msg.setText("McLabel does not support multi-scale data. Converting to largest scale available. This may take some time.")
+                #msg.setWindowTitle("Converting Multi-Scale Data")
+                #msg.setStandardButtons(QMessageBox.Ok)
+                #msg.exec_()
 
-                img_data = self.image_layer.data[0].compute()
+                # Get the resolution levels
+                #comboItems = [str(i) for i in range(len(self.image_layer.data))]
+                comboItems = []
+                for i, level in enumerate(self.image_layer.data):
+                    comboItems.append(f"Level {i} ({level.shape[0]}x{level.shape[1]}x{level.shape[2]})")
+                dialog = ThemedOptionDialog(self.viewer, comboItems, parent=self)
+                if dialog.exec_() == QDialog.Accepted:
+                    selected_level = int(dialog.get_selected_option().split(" ")[1])
+                    print(f"Selected level: {selected_level}")
+                else:
+                    # Remain in NO_INIT state
+                    self.draw_compute_btn.setText("Draw Label")
+                    return
+
+                img_data = self.image_layer.data[selected_level].compute()
                 # save name and colormap of the original layer
                 name = self.image_layer.name
                 colormap = self.image_layer.colormap
@@ -538,7 +616,7 @@ def napari_experimental_provide_dock_widget():
 def main():
     # Load sample image
     viewer = napari.Viewer()
-    win = McLabel(viewer)
+    viewer.window.add_dock_widget(McLabel(viewer), area='right', name='McLabel')
     # input('Press ENTER to exit')
     napari.run()
 
