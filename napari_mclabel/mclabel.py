@@ -77,18 +77,16 @@ class ThemedOptionDialog(QDialog):
         
         self.setWindowTitle("Multi-Scale Image: Select Resolution Level for McLabel")
 
-        # Apply napari's stylesheet
         self.viewer = viewer
         self.apply_napari_styles()
 
-        # Create the label
         label = QLabel("A multi-scale image was detected. McLabel only supports single-scale images. Please select a resolution level:")
 
-        # Create the dropdown (combobox)
         self.combobox = QComboBox()
         self.combobox.addItems(comboItems)
 
-        # Create the buttons
+        self.checkbox = QCheckBox("Use 2D maximum intensity projection (only 3D)")
+
         ok_button = QPushButton("OK")
         cancel_button = QPushButton("Cancel")
 
@@ -96,7 +94,6 @@ class ThemedOptionDialog(QDialog):
         ok_button.clicked.connect(self.accept)
         cancel_button.clicked.connect(self.reject)
 
-        # Set up the layout
         button_layout = QHBoxLayout()
         button_layout.addWidget(ok_button)
         button_layout.addWidget(cancel_button)
@@ -104,6 +101,7 @@ class ThemedOptionDialog(QDialog):
         layout = QVBoxLayout()
         layout.addWidget(label)
         layout.addWidget(self.combobox)
+        layout.addWidget(self.checkbox)
         layout.addLayout(button_layout)
 
         self.setLayout(layout)
@@ -131,6 +129,9 @@ class ThemedOptionDialog(QDialog):
 
     def get_selected_option(self):
         return self.combobox.currentText()
+    
+    def get_checkbox_state(self):
+        return self.checkbox.isChecked()
 
 
 class McLabel(QWidget):
@@ -314,6 +315,7 @@ class McLabel(QWidget):
                 dialog = ThemedOptionDialog(self.viewer, comboItems, parent=self)
                 if dialog.exec_() == QDialog.Accepted:
                     selected_level = int(dialog.get_selected_option().split(" ")[1])
+                    use_mip = dialog.get_checkbox_state()
                     print(f"Selected level: {selected_level}")
                 else:
                     # Remain in NO_INIT state
@@ -321,6 +323,8 @@ class McLabel(QWidget):
                     return
 
                 img_data = self.image_layer.data[selected_level].compute()
+                if use_mip:
+                    img_data = np.amax(img_data, axis=0)
                 # save name and colormap of the original layer
                 name = self.image_layer.name
                 colormap = self.image_layer.colormap
