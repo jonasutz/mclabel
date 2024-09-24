@@ -11,6 +11,7 @@ from skimage.util import map_array
 from enum import Enum
 from napari_plugin_engine import napari_hook_implementation
 from dataclasses import dataclass
+import inspect
 
 
 class State(Enum):
@@ -45,6 +46,27 @@ def on_label_change(event):
     #     print("Label changed but didn't increase by 1")
     # print(vars(event._sources[0]))
     pass
+
+
+def safe_call_algo(algo, *args, **kwargs):
+    # Get the signature of the function
+    sig = inspect.signature(algo)
+    
+    # Prepare the lists for filtered args and kwargs
+    filtered_args = []
+    filtered_kwargs = {}
+
+    # Positional arguments filtering
+    param_names = [param.name for param in sig.parameters.values() if param.kind in [param.POSITIONAL_OR_KEYWORD, param.POSITIONAL_ONLY]]
+    filtered_args = args[:len(param_names)]
+    
+    # Keyword arguments filtering
+    for name, value in kwargs.items():
+        if name in sig.parameters:
+            filtered_kwargs[name] = value
+
+    # Call the function with filtered arguments
+    return algo(*filtered_args, **filtered_kwargs)
 
 
 class McLabel(QWidget):
@@ -365,7 +387,7 @@ class McLabel(QWidget):
     def compute_label_from_patch(self, img_patch, thresh=None, min_area=None):
         if thresh is None:
             # thresh = skimage.filters.threshold_triangle(img_patch, nbins=32)
-            thresh = self.algo(img_patch, nbins=32)
+            thresh = safe_call_algo(self.algo,img_patch, nbins=32)
         binary = McLabel.apply_threshold(img_patch, thresh)
         label_image = McLabel.connected_component(binary)
         if min_area is not None:
