@@ -1,7 +1,7 @@
 import numpy as np
 import napari
 from scipy import ndimage
-from qtpy.QtWidgets import QPushButton, QLabel, QSlider, QWidget, QCheckBox, QComboBox
+from qtpy.QtWidgets import QPushButton, QLabel, QSlider, QWidget, QCheckBox, QComboBox, QMessageBox
 from qtpy.QtCore import *
 from qtpy import QtCore
 import skimage.filters
@@ -12,7 +12,7 @@ from enum import Enum
 from napari_plugin_engine import napari_hook_implementation
 from dataclasses import dataclass
 import inspect
-
+import dask.array as da
 
 class State(Enum):
     DRAW = 1
@@ -231,6 +231,23 @@ class McLabel(QWidget):
     def draw_fn(self):
         if self.state == State.NO_INIT:
             self.image_layer = self.viewer.layers[self.layer_selection_cb.currentText()]
+            # Due to problems with dask arrays we need to convert them to numpy arrays
+            # but to avoid rendering issues we will create a new layer with the numpy array and delete the old
+            if isinstance(self.image_layer.data, napari.layers._multiscale_data.MultiScaleData):
+                # Alert user that this takes some time
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Warning)
+                msg.setText("McLabel does not support multi-scale data. Converting to largest scale available. This may take some time.")
+                msg.setWindowTitle("Converting Multi-Scale Data")
+                msg.setStandardButtons(QMessageBox.Ok)
+                msg.exec_()
+
+                img_data = self.image_layer.data[0].compute()
+                # save name and colormap of the original layer
+                name = self.image_layer.name
+                colormap = self.image_layer.colormap
+                self.viewer.layers.remove(self.image_layer)
+                self.image_layer = self.viewer.add_image(img_data, name=name, colormap=colormap)
             if self.image_layer.data.shape[-1] in (3, 4):  # cheap heuristic for RGB(A)
                 self.label_layer = self.viewer.add_labels(np.zeros(self.image_layer.data.shape[0:2], dtype='int32'),
                                                           name="Output Label")
@@ -240,7 +257,12 @@ class McLabel(QWidget):
                     name='Output Label')
 
             self.label_layer.events.selected_label.connect(on_label_change)
-            self.threshold_slider.setRange(0, int(self.image_layer.data.max() // 2))
+            # If we have MultiScale Images we can't simply comoute the max value. Instead we use the contrast limits
+            # But actually we could probably use the contrast limits for all images
+            if self.image_layer.multiscale:
+                self.threshold_slider.setRange(0, int(self.image_layer.contrast_limits[1]))
+            else:
+                self.threshold_slider.setRange(0, int(self.image_layer.data.max() // 2))
             self.draw_compute_btn.setText("Compute Label")
         self.state = State.DRAW
 
@@ -364,10 +386,16 @@ class McLabel(QWidget):
             img_patch[
                 labeled_macro[minr:maxr, minc:maxc] == 0] = 0  # removes parts outside hand-drawn region
         if self.img_type == ImageType.SC_3D:
-            img_patch = self.image_layer.data[
-                        self.viewer.dims.current_step[0],  # z
-                        minr:maxr,  # y
-                        minc:maxc].copy()  # x
+            if not self.image_layer.multiscale:
+                img_patch = self.image_layer.data[
+                            self.viewer.dims.current_step[0],  # z
+                            minr:maxr,  # y
+                            minc:maxc].copy()  # x
+            else:
+                img_patch = self.image_layer.data[self.image_layer.data_level][
+                            self.viewer.dims.current_step[0],  # z
+                            minr:maxr,  # y
+                            minc:maxc].copy()
             img_patch[labeled_macro[minr:maxr, minc:maxc] == 0] = 0
         if self.img_type == ImageType.MC_3D:
             img_patch = self.image_layer.data[
@@ -511,7 +539,9 @@ def main():
     # Load sample image
     viewer = napari.Viewer()
     win = McLabel(viewer)
-    input('Press ENTER to exit')
+    # input('Press ENTER to exit')
+    napari.run()
+
 
 
 if __name__ == "__main__":
